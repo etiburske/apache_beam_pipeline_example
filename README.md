@@ -39,7 +39,9 @@ If you do not have all packages installed and are using Windows machine:
 The output file containing the results will be saved as `output\results.jsonl.gz`.
 
 ## Unittest
-To run unittest for the Composite Transform locally:
+To run unittest locally:
 ```
 python test/pipeline_test.py
 ```
+This unittest will test the Composite Transform and other created classes or methods. 
+It will also run automatically when new commits are send to this repository.
