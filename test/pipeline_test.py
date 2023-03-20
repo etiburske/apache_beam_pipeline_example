@@ -1,13 +1,13 @@
 """ Apache Beam unittest pipeline example
 
-This unittest example tests the pipeline.py Composite Transform
+This unittest example tests the pipeline.py Composite Transform and other methods
 """
 
 # Standard Imports
 import unittest
 import sys
-import os
-import time
+from datetime import datetime
+import json
 
 # Apache Beam Imports
 import apache_beam as beam
@@ -18,11 +18,9 @@ from apache_beam.testing.util import equal_to
 
 # Local Imports
 sys.path.append('../apache_beam_pipeline_example')
-from pipeline import GetTransactionsAmountByDate
+import pipeline
 
 # Global Variables
-current_dir = os.getcwd()
-print(current_dir)
 TEST_FILE_OUTPUT = 'test/output/results'
 
 class TransactionsByDateTest(unittest.TestCase):
@@ -65,21 +63,120 @@ class TransactionsByDateTest(unittest.TestCase):
             '{"date": "2022-01-02", "total_amount": 25.0}',
         ]
 
-        # Create a test pipeline.
-        with TestPipeline() as p:
-            # Create an input PCollection
+        # Create a test pipeline to run the Composite Transform
+        with TestPipeline() as p1:
             pcoll = (
-                p 
+                p1 
+                # Create an input PCollection
                 | 'Test:CreateInput' >> beam.Create(input)
                 # Apply the Composite Transform under test
-                | 'Test:RunComposite' >> GetTransactionsAmountByDate(TEST_FILE_OUTPUT)
-                # Read test output file
-                | 'Test:ReadOutput' >> ReadFromText(TEST_FILE_OUTPUT + '.jsonl.gz', validate=False)
+                | 'Test:RunComposite' >> pipeline.GetTransactionsAmountByDate(TEST_FILE_OUTPUT)
             )
 
-        # Assert on the results
-        assert_that(pcoll, equal_to(expected_output), label="Test:CheckOutput")
+        # Created p2 such that the output file gets created in p1 and can be read in p2
+        with TestPipeline() as p2:
+            out = (
+                p2
+                | 'Test:ReadOutput' >> ReadFromText(TEST_FILE_OUTPUT + '.jsonl.gz', compression_type='gzip')
+            )
+            assert_that(out, equal_to(expected_output), label="Test:CheckOutput")
 
+class GetDateFromTimestampTest(unittest.TestCase):
+    """ Class to test GetDateFromTimestamp() class
+    """
+    def test_process(self):
+        # Create static input and expected output
+        input = beam.Row(
+                timestamp="2022-01-01 12:00:00 UTC",
+                origin="A",
+                destination="B",
+                transaction_amount=30.0,
+            )
+        expected_output = beam.Row(
+                timestamp="2022-01-01 12:00:00 UTC",
+                origin="A",
+                destination="B",
+                transaction_amount=30.0,
+                date = datetime.date(datetime(2022, 1, 1)),
+            )
+
+        # Create a test pipeline
+        with TestPipeline() as p:
+            # Apply the transformation to the test element
+            result = (
+                p
+                | beam.Create([input])
+                | beam.ParDo(pipeline.GetDateFromTimestamp())
+            )
+
+            # Assert the result has the expected date attribute value
+            assert_that(result, equal_to([expected_output]))
+
+class ExtractDateAndAmountTest(unittest.TestCase):
+    """ Class to test ExtractDateAndAmount() class
+    """
+    def test_process(self):
+        # Create static input and expected output
+        input = beam.Row(
+                timestamp="2022-01-01 12:00:00 UTC",
+                origin="A",
+                destination="B",
+                transaction_amount=30.0,
+                date=datetime.date(datetime(2022, 1, 1)),
+            )
+        expected_output = ('2022-01-01', 30.0)
+
+        # Create a test pipeline
+        with TestPipeline() as p:
+            # Apply the transformation to the test element
+            result = (
+                p
+                | beam.Create([input])
+                | beam.ParDo(pipeline.ExtractDateAndAmount())
+            )
+
+            # Assert the result will be yield as tuple
+            assert_that(result, equal_to([expected_output]))
+
+class TupleToJsonTest(unittest.TestCase):
+    """ Class to test TupleToJson() class
+    """
+    def test_process(self):
+        # Create static input and expected output
+        input = ('2022-01-01', 30.0)
+        expected_output = json.dumps({'date': '2022-01-01', 'total_amount': 30.0}).encode('utf-8')
+
+        # Create a test pipeline
+        with TestPipeline() as p:
+            # Apply the transformation to the test element
+            result = (
+                p
+                | beam.Create([input])
+                | beam.ParDo(pipeline.TupleToJson())
+            )
+
+            # Assert the result will be yield as the expected_output
+            assert_that(result, equal_to([expected_output]))
+
+class ParseLinesTest(unittest.TestCase):
+    """ Class to test parse_lines() method
+    """
+    def test_process(self):
+        # Create static input and expected output
+        input = 'ab,bc,defgh'
+        expected_output = ['ab','bc','defgh']
+
+        # Create a test pipeline
+        with TestPipeline() as p:
+            # Apply the transformation to the test element
+            result = (
+                p
+                | beam.Create([input])
+                | beam.Map(pipeline.parse_lines)
+            )
+
+            # Assert the result will be returned as the expected_output
+            assert_that(result, equal_to([expected_output]))
 
 if __name__ == '__main__':
     unittest.main()

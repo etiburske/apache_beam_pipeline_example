@@ -33,9 +33,15 @@ class GetDateFromTimestamp(beam.DoFn):
         # Converts timestamp from string to datetime
         element_timestamp = datetime.strptime(element.timestamp, '%Y-%m-%d %H:%M:%S %Z')
         # Get date and assign to new attribute
-        element.date = element_timestamp.date()
+        new_row = {
+            'timestamp': element.timestamp,
+            'origin': element.origin,
+            'destination': element.destination,
+            'transaction_amount': element.transaction_amount,
+            'date': element_timestamp.date()
+            }
 
-        yield element
+        yield beam.Row(**new_row)
 
 class ExtractDateAndAmount(beam.DoFn):
     """ DoFn class to extract only 'date' and 'transaction_amount' attributes from the PCollection element
@@ -133,9 +139,6 @@ def run():
         Return:
             None
     """
-    # pipeline_options = PipelineOptions(save_main_session=True)
-    # with beam.Pipeline(options=pipeline_options) as p:
-
     # Construct pipeline object
     with beam.Pipeline() as p:
 
@@ -145,7 +148,7 @@ def run():
             # Read input data from external source, skipping header
             | 'ReadMyFile' >> ReadFromText(INPUT_TABLE, skip_header_lines=1)
             # Split strings
-            | 'ParseLines' >> beam.Map(parse_lines)        
+            | 'ParseLines' >> beam.Map(parse_lines)
         )
 
         # Task 1: Make transformations to input
